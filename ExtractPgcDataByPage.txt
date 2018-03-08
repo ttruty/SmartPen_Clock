@@ -1,0 +1,58 @@
+Function PgcToTxt ($strPgcIn) {
+    $penrequest = new-object -comobject Anoto.ServiceAPI.PenRequest
+    $file = new-object -comobject AnotoUtil.File
+    $data = $file.Read($strPgcIn)
+    $penrequest.Initialize($data)
+    $reqpages = $penrequest.Pages
+    foreach ($page in $reqpages) {
+        $stream = [System.IO.StreamWriter] ((get-item $strPgcIn).Directory.FullName + "\" + $page.PageAddress.Split("#")[0] + "_" + (get-item $strPgcIn).Name.TrimEnd("pgc") + "txt")
+        $stream.WriteLine("Pen id: " + $penrequest.PenId)
+        $stream.WriteLine("Number of pages: 1")
+        $bounds = $page.Bounds
+        $strokes = $page.PenStrokes
+        $stream.WriteLine("Page address: " + $page.PageAddress)
+        $stream.WriteLine(("Page bounds:", $bounds.Left, $bounds.Top, $bounds.Right, $bounds.Bottom -join " "))
+        $stream.WriteLine("Number of strokes: " + $strokes.Count)
+        $strokeid = 1
+        foreach ($stroke in $strokes) {
+            $arrX = $stroke.x
+            $arrY = $stroke.y
+            $arrF = $stroke.Force
+            $arrT = $stroke.DeltaTime
+            $hexColor = [Convert]::ToString($stroke.Color, 16)
+            $stream.WriteLine("StrokeID: " + $strokeid)
+            $stream.WriteLine("Number of samples: " + $arrX.Count)
+            $stream.WriteLine(("Color:", ([Convert]::ToInt32($hexColor.Substring(4, 2), 16)), ([Convert]::ToInt32($hexColor.Substring(2, 2), 16)), ([Convert]::ToInt32($hexColor.Substring(0, 2), 16)) -join " "))
+            $stream.WriteLine("StartTime: " + $stroke.StartSecond + "." + $stroke.StartMillisecond.ToString("000"))
+            for ($i = 0; $i -lt $arrX.Count; $i++) {
+                $stream.WriteLine(($arrX[$i].ToString("#.0000"), $arrY[$i].ToString("#.0000"), $arrT[$i], $arrF[$i] -join " "))
+            }
+            $strokeid++
+        }
+        $stream.Close()
+    }
+}
+
+
+Function ProcessPgcFolder ($strPgcFolder) {
+    Write-Host "Processing" $strPgcFolder
+    # get array of PGC files in the specified folder
+    $arrPgc = Get-ChildItem -Path $strPgcFolder -Filter *.pgc
+    $numFiles = $($arrPgc | measure).Count
+    if ($numFiles -gt 0) {
+        $i = 1
+        $arrPgc | Foreach-Object {
+            $name = $_.Name
+            Write-Host ($i) "of" $numFiles ":" $name
+            PgcToTxt ($strPgcFolder + $name)
+            $i++
+        }
+    } else {
+        Write-Host "No PGC files found"
+    }
+}
+
+
+# Below, specify one or more directories containing PGC files to process:
+
+ProcessPgcFolder "C:\Wherever_You_Have_PGC_Files\"
